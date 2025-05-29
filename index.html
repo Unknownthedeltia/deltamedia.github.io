@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイムチャット | スレッド機能</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.6/purify.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .screen {
+            width: 100%;
+            max-width: 700px;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        /* メイン画面のスタイル */
+        #mainScreen {
+            padding: 30px;
+            text-align: center;
+        }
+        #mainScreen h1 {
+            font-size: 1.8rem;
+            color: #075E54;
+            margin-bottom: 10px;
+        }
+        #mainScreen .user-id-display-main, #mainScreen .username-display-main {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+        #usernameSetupContainer input {
+            width: calc(100% - 90px); /* ボタン幅を考慮 */
+            padding: 10px;
+            margin-right: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border: 1px solid #d1d5db;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        #usernameSetupContainer button {
+            width: 80px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background-color: #0c5b51;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            border: none;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        #usernameSetupContainer button:hover {
+            background-color: #073e37;
+        }
+        .room-actions { margin-top: 20px; }
+        .room-actions button, .room-actions input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            font-size: 1rem;
+            border: 1px solid #d1d5db;
+        }
+        .room-actions button {
+            background-color: #128C7E;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .room-actions button:hover {
+            background-color: #075E54;
+        }
+        .room-actions .join-room-container {
+            display: flex;
+            gap: 10px;
+        }
+        .room-actions .join-room-container input {
+            flex-grow: 1;
+            margin-bottom: 0;
+        }
+        #createRoomContainer input {
+            margin-bottom: 10px;
+        }
+
+        /* チャットコンテナのスタイル */
+        .chat-container {
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            background-color: #075E54;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 1px solid #064C42;
+            position: relative;
+        }
+        .chat-header #chatRoomTitle {
+            font-size: 1.2rem;
+            display: block;
+        }
+        .chat-header .room-id-display {
+            font-size: 0.8rem;
+            color: #A0D9C9;
+        }
+         .user-id-display-chat { /* チャット画面のユーザー名表示 */
+            font-size: 0.7rem;
+            color: #DCF8C6;
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            max-width: 100px; /* 長いユーザー名のための調整 */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .back-to-main-button {
+            position: absolute;
+            top: 50%;
+            left: 15px;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+            opacity: 0;
+            transform: translateY(20px);
+            position: relative;
+        }
+        .message.sent {
+            background-color: #DCF8C6;
+            color: #303030;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .message.received {
+            background-color: #f1f0f0;
+            color: #303030;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .message-sender {
+            font-size: 0.7rem;
+            color: #555;
+            margin-bottom: 3px;
+            display: block;
+            font-weight: bold;
+        }
+        .message-text {
+            font-size: 0.9rem;
+        }
+        .message-text strong { font-weight: bold; }
+        .message-text em { font-style: italic; }
+        .message-text u { text-decoration: underline; }
+        .message-text del { text-decoration: line-through; }
+        .message-text a { /* リンクのスタイル */
+            color: #007bff;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .message-text a:hover {
+            color: #0056b3;
+        }
+        
+        .reply-info {
+            font-size: 0.75rem;
+            color: #075E54;
+            margin-bottom: 4px;
+            display: block;
+            cursor: pointer;
+        }
+        .reply-info:hover {
+            text-decoration: underline;
+        }
+
+        .message-timestamp {
+            font-size: 0.65rem;
+            color: #999;
+            text-align: right;
+            margin-top: 4px;
+            display: block;
+        }
+        .reply-button {
+            font-size: 0.7rem;
+            color: #075E54;
+            background-color: rgba(255,255,255,0.7);
+            border: 1px solid #075E54;
+            border-radius: 10px;
+            padding: 2px 6px;
+            cursor: pointer;
+            position: absolute;
+            bottom: 5px;
+            right: -30px;
+            opacity: 0.5;
+            transition: opacity 0.2s, right 0.2s;
+        }
+        .message:hover .reply-button {
+            opacity: 1;
+            right: -35px;
+        }
+        #replyingToContainer {
+            padding: 5px 15px;
+            font-size: 0.8rem;
+            color: #555;
+            background-color: #e6e6e6;
+        }
+        #replyingToContainer button {
+            margin-left: 10px;
+            font-size: 0.7rem;
+            background: none;
+            border: none;
+            color: #cc0000;
+            cursor: pointer;
+        }
+
+        .chat-input-form {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            border-top: 1px solid #e0e0e0;
+            background-color: #f0f2f5;
+        }
+        .chat-input-wrapper {
+            display: flex;
+            padding: 15px;
+        }
+        .chat-input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 20px;
+            margin-right: 10px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .chat-input:focus {
+            border-color: #075E54;
+        }
+        .send-button {
+            background-color: #128C7E;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+        .send-button:hover {
+            background-color: #075E54;
+        }
+        .chat-messages::-webkit-scrollbar { width: 8px; }
+        .chat-messages::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 10px; }
+        .chat-messages::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background-color: #fff; margin: auto; padding: 25px; border: 1px solid #ddd; border-radius: 10px; width: 80%; max-width: 450px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        .modal-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; }
+        .modal-body { margin-bottom: 20px; word-break: break-all; }
+        .modal-footer button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .modal-button-confirm { background-color: #28a745; color: white; }
+        .modal-button-confirm:hover { background-color: #218838; }
+        .modal-button-cancel { background-color: #dc3545; color: white; }
+        .modal-button-cancel:hover { background-color: #c82333; }
+        .modal-close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; position: absolute; top: 10px; right: 15px; }
+        .modal-close-button:hover, .modal-close-button:focus { color: #333; text-decoration: none; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="mainScreen" class="screen">
+        <h1>チャットスレッドへようこそ</h1>
+        <div id="userIdDisplayMain" class="user-id-display-main">UserID: 読み込み中...</div>
+        <div id="usernameDisplayMain" class="username-display-main"></div>
+        <div id="usernameSetupContainer" class="mb-4">
+            <input type="text" id="usernameInput" placeholder="ユーザー名を入力 (20文字以内)">
+            <button id="saveUsernameButton">保存</button>
+        </div>
+        <div class="room-actions">
+            <div id="createRoomContainer">
+                <input type="text" id="newRoomNameInput" placeholder="新しいスレッド名を入力">
+                <button id="createRoomButton">新しいスレッドを作成</button>
+            </div>
+            <hr class="my-4">
+            <div class="join-room-container">
+                <input type="text" id="joinRoomIdInput" placeholder="既存のスレッドID (6文字) を入力">
+                <button id="joinRoomButton">スレッドに参加</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chatScreen" class="screen chat-container hidden">
+        <div class="chat-header">
+            <button id="backToMainButton" class="back-to-main-button" title="メインに戻る">&larr;</button>
+            <div>
+                <span id="chatRoomTitle">スレッド名</span>
+                <div id="roomIdDisplay" class="room-id-display">ID: ...</div>
+            </div>
+            <div id="userIdDisplayChat" class="user-id-display-chat">ユーザー名: ...</div>
+        </div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <form id="chatInputForm" class="chat-input-form">
+            <div id="replyingToContainer" class="hidden">
+                <span id="replyingToText"></span>
+                <button id="cancelReplyButton" type="button">&times; キャンセル</button>
+            </div>
+            <div class="chat-input-wrapper">
+                <input type="text" id="chatInput" class="chat-input" placeholder="メッセージを入力 (*太字* _イタリック_ ~取消線~)" autocomplete="off">
+                <button type="submit" class="send-button">送信</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close-button" onclick="closeModal('errorModal')">&times;</span>
+            <div class="modal-header">エラー</div>
+            <p id="errorMessage" class="modal-body"></p>
+        </div>
+    </div>
+
+    <div id="linkWarningModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close-button" onclick="closeModal('linkWarningModal')">&times;</span>
+            <div class="modal-header">外部リンクへの遷移</div>
+            <p id="linkWarningMessage" class="modal-body"></p>
+            <div class="modal-footer">
+                <button id="confirmLinkButton" class="modal-button-confirm">はい</button>
+                <button onclick="closeModal('linkWarningModal')" class="modal-button-cancel">いいえ</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, orderBy as firestoreOrderBy, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "AIzaSyBWe3KqHTxfKQp4uiLDsA9bD0hBQ6F_Cr4", 
+        authDomain: "halifumichat.firebaseapp.com", 
+        projectId: "halifumichat",
+        storageBucket: "halifumichat.firebasestorage.app",
+        messagingSenderId: "926073698026",
+        appId: "1:926073698026:web:d8e004d3135c6add7cc993",
+        measurementId: "G-HQWYP2MMZ9" };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-chat-app';
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // DOM Elements
+        const mainScreen = document.getElementById('mainScreen');
+        const chatScreen = document.getElementById('chatScreen');
+        const newRoomNameInput = document.getElementById('newRoomNameInput');
+        const createRoomButton = document.getElementById('createRoomButton');
+        const joinRoomIdInput = document.getElementById('joinRoomIdInput');
+        const joinRoomButton = document.getElementById('joinRoomButton');
+        const backToMainButton = document.getElementById('backToMainButton');
+        
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInputForm = document.getElementById('chatInputForm');
+        const chatInput = document.getElementById('chatInput');
+        
+        const userIdDisplayMain = document.getElementById('userIdDisplayMain');
+        const usernameDisplayMain = document.getElementById('usernameDisplayMain');
+        const usernameInput = document.getElementById('usernameInput');
+        const saveUsernameButton = document.getElementById('saveUsernameButton');
+        const userIdDisplayChat = document.getElementById('userIdDisplayChat'); // チャット画面のユーザー名表示
+        
+        const roomIdDisplay = document.getElementById('roomIdDisplay');
+        const chatRoomTitle = document.getElementById('chatRoomTitle');
+
+        const replyingToContainer = document.getElementById('replyingToContainer');
+        const replyingToText = document.getElementById('replyingToText');
+        const cancelReplyButton = document.getElementById('cancelReplyButton');
+
+        const errorModal = document.getElementById('errorModal');
+        const errorMessage = document.getElementById('errorMessage');
+        const linkWarningModal = document.getElementById('linkWarningModal');
+        const linkWarningMessage = document.getElementById('linkWarningMessage');
+        const confirmLinkButton = document.getElementById('confirmLinkButton');
+
+        // Global state
+        let currentUser = null;
+        let userId = null;
+        let currentUsername = null; // ユーザー名を保持
+        let currentRoomId = null;
+        let currentRoomName = null;
+        let messagesUnsubscribe = null;
+        let replyingToMessageId = null;
+        let linkToOpen = null; // 警告モーダルで開くリンク
+
+        // --- Utility Functions ---
+        function generateRoomId() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+            return result;
+        }
+
+        // --- Screen Transitions ---
+        function showMainScreen() {
+            gsap.to(chatScreen, { opacity: 0, duration: 0.3, onComplete: () => {
+                chatScreen.classList.add('hidden');
+                mainScreen.classList.remove('hidden');
+                gsap.fromTo(mainScreen, {opacity: 0, y: 20}, {opacity: 1, y: 0, duration: 0.5, ease: "power3.out"});
+            }});
+            if (messagesUnsubscribe) messagesUnsubscribe();
+            messagesUnsubscribe = null;
+            currentRoomId = null;
+            currentRoomName = null;
+            chatMessages.innerHTML = '';
+            cancelReply();
+        }
+
+        async function showChatRoom(roomId, roomName = "スレッド") {
+            currentRoomId = roomId;
+            currentRoomName = roomName;
+            roomIdDisplay.textContent = `ID: ${roomId}`;
+            chatRoomTitle.textContent = roomName;
+
+            const roomRef = doc(db, `/artifacts/${appId}/public/data/rooms/${currentRoomId}`);
+            const roomSnap = await getDoc(roomRef);
+
+            if (!roomSnap.exists()) {
+                if (document.activeElement !== createRoomButton) {
+                    showErrorModal("指定されたスレッドは存在しません。");
+                    showMainScreen();
+                    return;
+                }
+                try {
+                    await setDoc(roomRef, { name: currentRoomName, createdAt: serverTimestamp() });
+                } catch (error) {
+                    console.error("Error creating room document:", error);
+                    showErrorModal(`スレッド情報の保存に失敗しました: ${error.message}`);
+                    showMainScreen();
+                    return;
+                }
+            } else if (!currentRoomName || currentRoomName === "スレッド") {
+                const roomData = roomSnap.data();
+                currentRoomName = roomData.name || "スレッド";
+                chatRoomTitle.textContent = currentRoomName;
+            }
+
+            gsap.to(mainScreen, { opacity: 0, duration: 0.3, onComplete: () => {
+                mainScreen.classList.add('hidden');
+                chatScreen.classList.remove('hidden');
+                gsap.fromTo(chatScreen, {opacity: 0, y: 20}, {opacity: 1, y: 0, duration: 0.5, ease: "power3.out"});
+            }});
+            loadMessages();
+        }
+
+        // --- Modals ---
+        function showErrorModal(message) {
+            errorMessage.textContent = message;
+            errorModal.style.display = 'flex';
+            gsap.fromTo("#errorModal .modal-content", {opacity: 0, scale: 0.8}, {opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.7)"});
+        }
+
+        function showLinkWarningModal(url) {
+            linkToOpen = url;
+            linkWarningMessage.textContent = `次の外部リンクに移動しますか？\n${url}`;
+            linkWarningModal.style.display = 'flex';
+            gsap.fromTo("#linkWarningModal .modal-content", {opacity: 0, scale: 0.8}, {opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.7)"});
+        }
+
+        window.closeModal = function(modalId) { // Make it globally accessible
+            const modalElement = document.getElementById(modalId);
+            if (modalElement) {
+                 gsap.to(`#${modalId} .modal-content`, {opacity: 0, scale: 0.8, duration: 0.2, onComplete: () => {
+                    modalElement.style.display = 'none';
+                }});
+            }
+        }
+        confirmLinkButton.addEventListener('click', () => {
+            if (linkToOpen) {
+                window.open(linkToOpen, '_blank', 'noopener,noreferrer');
+                closeModal('linkWarningModal');
+                linkToOpen = null;
+            }
+        });
+
+
+        // --- Authentication and User Profile ---
+        async function initializeAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication error:", error);
+                showErrorModal(`認証エラー: ${error.message}.`);
+            }
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    userId = user.uid;
+                    await loadUsername(); // ユーザー名を読み込む
+                } else {
+                    currentUser = null;
+                    userId = crypto.randomUUID(); // 匿名ユーザー用のID
+                    currentUsername = null; // 匿名ユーザーはユーザー名なし
+                }
+                updateUserDisplay();
+                showMainScreen();
+            });
+        }
+
+        async function loadUsername() {
+            if (!userId) return;
+            const userSettingsRef = doc(db, `/artifacts/${appId}/users/${userId}/settings/profile`);
+            try {
+                const docSnap = await getDoc(userSettingsRef);
+                if (docSnap.exists()) {
+                    currentUsername = docSnap.data().username;
+                } else {
+                    currentUsername = null;
+                }
+            } catch (error) {
+                console.error("Error loading username:", error);
+                currentUsername = null;
+            }
+        }
+
+        async function saveUsername() {
+            if (!userId) {
+                showErrorModal("ユーザーIDが取得できません。");
+                return;
+            }
+            const newUsername = usernameInput.value.trim();
+            if (newUsername.length === 0 || newUsername.length > 20) {
+                showErrorModal("ユーザー名は1文字以上20文字以内で入力してください。");
+                return;
+            }
+            const userSettingsRef = doc(db, `/artifacts/${appId}/users/${userId}/settings/profile`);
+            try {
+                await setDoc(userSettingsRef, { username: newUsername }, { merge: true });
+                currentUsername = newUsername;
+                updateUserDisplay();
+                usernameInput.value = ''; // 入力欄をクリア
+                showErrorModal("ユーザー名を保存しました。"); // 成功メッセージ
+            } catch (error) {
+                console.error("Error saving username:", error);
+                showErrorModal(`ユーザー名の保存に失敗しました: ${error.message}`);
+            }
+        }
+        saveUsernameButton.addEventListener('click', saveUsername);
+
+        function updateUserDisplay() {
+            userIdDisplayMain.textContent = `UserID: ${userId.substring(0,12)}...`;
+            if (currentUsername) {
+                usernameDisplayMain.textContent = `ユーザー名: ${currentUsername}`;
+                userIdDisplayChat.textContent = currentUsername; // チャット画面にもユーザー名
+            } else {
+                usernameDisplayMain.textContent = "ユーザー名未設定";
+                userIdDisplayChat.textContent = `User: ${userId.substring(0,8)}...`;
+            }
+        }
+        initializeAuth();
+
+
+        // --- Room Management ---
+        createRoomButton.addEventListener('click', async () => {
+            const roomName = newRoomNameInput.value.trim() || "名称未設定スレッド";
+            const newRoomId = generateRoomId();
+            newRoomNameInput.value = '';
+            await showChatRoom(newRoomId, roomName);
+        });
+
+        joinRoomButton.addEventListener('click', async () => {
+            const roomIdToJoin = joinRoomIdInput.value.trim();
+            if (roomIdToJoin && roomIdToJoin.length === 6) {
+                const roomRef = doc(db, `/artifacts/${appId}/public/data/rooms/${roomIdToJoin}`);
+                const roomSnap = await getDoc(roomRef);
+                if (roomSnap.exists()) {
+                    const roomData = roomSnap.data();
+                    showChatRoom(roomIdToJoin, roomData.name || "スレッド");
+                    joinRoomIdInput.value = '';
+                } else {
+                    showErrorModal("指定されたスレッドIDは存在しません。");
+                }
+            } else {
+                showErrorModal("有効な6文字のスレッドIDを入力してください。");
+            }
+        });
+        backToMainButton.addEventListener('click', showMainScreen);
+
+        // --- Message Handling ---
+        function formatMessageText(text) {
+            let html = text;
+            // 1. HTMLエンティティにエスケープ (XSS対策の基本)
+            const tempDiv = document.createElement('div');
+            tempDiv.textContent = html;
+            html = tempDiv.innerHTML;
+
+            // 2. Markdown風装飾
+            html = html.replace(/\*(.+?)\*/g, '<strong>$1</strong>')
+                       .replace(/_(.+?)_/g, '<em>$1</em>')
+                       .replace(/~(.+?)~/g, '<del>$1</del>');
+            
+            // 3. URLをリンクに変換 (http/httpsで始まるもの)
+            const urlRegex = /(\b(https?):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+            html = html.replace(urlRegex, function(url) {
+                return `<a data-link="${url}" href="javascript:void(0);" title="${url}">${url}</a>`;
+            });
+
+            // 4. DOMPurifyでサニタイズ (target属性はここでは不要、data-linkを許可)
+            return DOMPurify.sanitize(html, {
+                USE_PROFILES: {html: true},
+                ADD_ATTR: ['data-link'] // data-link属性を許可
+            });
+        }
+
+        async function sendMessage(text) {
+            if (!text.trim() || !currentRoomId) return;
+            
+            const messageData = {
+                text: text,
+                timestamp: serverTimestamp(),
+                userId: userId,
+                username: currentUsername || null // ユーザー名も保存
+            };
+            if (replyingToMessageId) {
+                messageData.replyTo = replyingToMessageId;
+            }
+
+            const messagesCollectionPath = `/artifacts/${appId}/public/data/rooms/${currentRoomId}/messages`;
+            try {
+                await addDoc(collection(db, messagesCollectionPath), messageData);
+                chatInput.value = '';
+                cancelReply();
+                gsap.fromTo(".send-button", {scale: 1}, {scale: 1.1, duration: 0.1, yoyo: true, repeat: 1});
+            } catch (error) {
+                console.error("Error sending message: ", error);
+                showErrorModal(`メッセージ送信エラー: ${error.message}`);
+            }
+        }
+
+        function loadMessages() {
+            if (!currentRoomId || !db) return;
+            if (messagesUnsubscribe) messagesUnsubscribe();
+            chatMessages.innerHTML = '';
+
+            const messagesCollectionPath = `/artifacts/${appId}/public/data/rooms/${currentRoomId}/messages`;
+            const q = query(collection(db, messagesCollectionPath), firestoreOrderBy("timestamp"));
+
+            messagesUnsubscribe = onSnapshot(q, (querySnapshot) => {
+                const newMessages = [];
+                querySnapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        newMessages.push({ id: change.doc.id, ...change.doc.data() });
+                    }
+                });
+                newMessages.sort((a, b) => (a.timestamp && b.timestamp ? a.timestamp.toMillis() - b.timestamp.toMillis() : 0));
+                newMessages.forEach(msg => displayMessage(msg, msg.id));
+            }, (error) => {
+                console.error(`Error loading messages for room ${currentRoomId}: `, error);
+                showErrorModal(`メッセージ読み込みエラー: ${error.message}`);
+            });
+        }
+
+        function displayMessage(messageData, docId) {
+            if (document.getElementById(`msg-${docId}`)) return;
+
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.id = `msg-${docId}`;
+
+            if (messageData.userId === userId) messageElement.classList.add('sent');
+            else messageElement.classList.add('received');
+
+            const senderElement = document.createElement('span');
+            senderElement.classList.add('message-sender');
+            // 送信者名を表示 (ユーザー名があればそれを、なければuserIdの一部)
+            senderElement.textContent = messageData.username || `User: ${messageData.userId.substring(0, 8)}...`;
+            messageElement.appendChild(senderElement);
+
+            if (messageData.replyTo) {
+                const replyInfoElement = document.createElement('div');
+                replyInfoElement.classList.add('reply-info');
+                const repliedMsgRef = doc(db, `/artifacts/${appId}/public/data/rooms/${currentRoomId}/messages/${messageData.replyTo}`);
+                getDoc(repliedMsgRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                        const repliedMsgData = docSnap.data();
+                        const repliedSender = repliedMsgData.username || `User: ${repliedMsgData.userId.substring(0,6)}...`;
+                        replyInfoElement.textContent = `>> ${repliedSender}: ${repliedMsgData.text.substring(0,20)}...`;
+                        replyInfoElement.title = `返信元: ${repliedMsgData.text}`;
+                        replyInfoElement.onclick = () => {
+                            const targetMsg = document.getElementById(`msg-${messageData.replyTo}`);
+                            if(targetMsg) targetMsg.scrollIntoView({behavior: "smooth", block: "center"});
+                        };
+                    } else {
+                         replyInfoElement.textContent = `>> [削除されたメッセージへの返信]`;
+                    }
+                }).catch(e => {
+                    console.warn("Error fetching replied message:", e);
+                    replyInfoElement.textContent = `>> [返信元の取得に失敗]`;
+                });
+                messageElement.appendChild(replyInfoElement);
+            }
+
+            const textElement = document.createElement('span');
+            textElement.classList.add('message-text');
+            textElement.innerHTML = formatMessageText(messageData.text);
+            messageElement.appendChild(textElement);
+
+            // リンクにイベントリスナーを追加
+            textElement.querySelectorAll('a[data-link]').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const url = link.getAttribute('data-link');
+                    if (url) showLinkWarningModal(url);
+                });
+            });
+
+
+            const timestampElement = document.createElement('span');
+            timestampElement.classList.add('message-timestamp');
+            timestampElement.textContent = messageData.timestamp?.toDate ? messageData.timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "送信中...";
+            messageElement.appendChild(timestampElement);
+
+            const replyButton = document.createElement('button');
+            replyButton.classList.add('reply-button');
+            replyButton.textContent = '返信';
+            replyButton.onclick = () => setReplyTo(docId, messageData.text, messageData.username || messageData.userId);
+            messageElement.appendChild(replyButton);
+
+            chatMessages.appendChild(messageElement);
+            gsap.to(messageElement, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out", onComplete: () => {
+                if (messageElement.classList.contains('sent') || chatMessages.scrollHeight - chatMessages.scrollTop < chatMessages.clientHeight + 150) {
+                     chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            }});
+        }
+        
+        function setReplyTo(messageId, originalText, originalSenderName) {
+            replyingToMessageId = messageId;
+            replyingToContainer.classList.remove('hidden');
+            const senderDisplay = typeof originalSenderName === 'string' && originalSenderName.length > 8 ? originalSenderName.substring(0,8) + '...' : originalSenderName;
+            replyingToText.textContent = `返信先: ${senderDisplay} "${originalText.substring(0, 20)}..."`;
+            chatInput.focus();
+            gsap.fromTo(replyingToContainer, {opacity:0, height:0}, {opacity:1, height:'auto', duration:0.3, ease:'power2.out'});
+        }
+
+        function cancelReply() {
+            replyingToMessageId = null;
+            gsap.to(replyingToContainer, {opacity:0, height:0, duration:0.2, onComplete: () => {
+                replyingToContainer.classList.add('hidden');
+            }});
+        }
+        cancelReplyButton.addEventListener('click', cancelReply);
+
+        chatInputForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendMessage(chatInput.value);
+        });
+
+        // Initial Animation
+        gsap.from("#mainScreen", {opacity: 0, y: 50, duration: 0.8, ease: "power3.out", delay: 0.2});
+    </script>
+</body>
+</html>
